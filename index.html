@@ -887,6 +887,29 @@
     white-space: nowrap;
   }
 
+  .record-del {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 10px;
+    border: 1px solid rgba(166, 75, 69, .26);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--danger);
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .18s, border-color .18s;
+  }
+
+  .record-del:active { background: rgba(166, 75, 69, .1); }
+
+  .record-del:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
   .record-title {
     margin: 11px 0 5px;
     font-family: var(--font-display);
@@ -1462,29 +1485,33 @@
     color: var(--ink-3);
   }
 
-  .setting-select {
+  .limit-picker {
     flex: 0 0 auto;
-    min-height: 42px;
-    padding: 0 36px 0 14px;
-    border: 1px solid rgba(47, 93, 80, .22);
-    border-radius: 12px;
-    background-color: #FFFFFF;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%232F5D50' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 13px center;
-    -webkit-appearance: none;
-    appearance: none;
-    color: var(--ink);
-    font-family: var(--font-ui);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
+    width: auto;
   }
 
-  .setting-select:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
+  .limit-segment {
+    width: auto;
+    min-width: 108px;
+    height: 42px;
+    padding: 0 11px 0 15px;
+    border: 1px solid rgba(47, 93, 80, .22);
+    border-radius: 999px;
+    background: #FFFFFF;
+    box-shadow: 0 1px 1px rgba(24, 36, 31, .04);
+    font-size: 14px;
   }
+
+  .limit-segment:hover { background: var(--primary-wash); }
+
+  .limit-picker .picker-menu {
+    left: auto;
+    right: 0;
+    min-width: 100%;
+    transform-origin: top right;
+  }
+
+  .limit-picker .picker-item { min-height: 42px; }
 
   .settings-actions {
     display: flex;
@@ -1975,17 +2002,19 @@
 
       <article class="card settings-card">
         <div class="setting-row">
-          <label class="setting-copy" for="dailyLimitSelect">
+          <div class="setting-copy">
             <span class="setting-name">每日复习上限</span>
             <span class="setting-hint">到期的题目按日期先后排队，超出上限的部分顺延到明天</span>
-          </label>
-          <select class="setting-select" id="dailyLimitSelect">
-            <option value="10">10 题</option>
-            <option value="15">15 题</option>
-            <option value="20">20 题</option>
-            <option value="30">30 题</option>
-            <option value="0">不限</option>
-          </select>
+          </div>
+          <div class="picker limit-picker" id="limitPicker">
+            <button class="segment limit-segment" type="button" id="limitTrigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="limitMenu">
+              <span class="segment-label" id="limitLabel">20 题</span>
+              <svg class="segment-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+            <div class="picker-menu" id="limitMenu" role="listbox" aria-label="每日复习上限" hidden></div>
+          </div>
         </div>
       </article>
 
@@ -2097,6 +2126,13 @@
   var LAST_QUERY_KEY = 'cuoti.lastQuery.v1';
   var DAILY_LIMIT_KEY = 'daily_review_limit';
   var DEFAULT_DAILY_LIMIT = 20;
+  var DAILY_LIMIT_OPTIONS = [
+    { value: 10, label: '10 题' },
+    { value: 15, label: '15 题' },
+    { value: 20, label: '20 题' },
+    { value: 30, label: '30 题' },
+    { value: 0, label: '不限' }
+  ];
 
   /* 题库数据优先从 questions.json 读取；错题记录仍单独存 localStorage */
   var QUESTION_BANK = [];
@@ -2505,12 +2541,62 @@
     toast('已清空所有错题数据');
   }
 
+  /* 手动删除单条错题：连同它的重刷进度一起移除 */
+  function deleteRecord(questionId) {
+    var cards = readReviewCards();
+    var target = cards.filter(function (card) { return card.questionId === questionId; })[0];
+    if (!target) return;
+
+    var bank = bankById(questionId);
+    var title = target.title || (bank ? bank.type + ' ' + bank.number : '这道错题');
+    if (!window.confirm('删除「' + title + '」？删除后该题的重刷记录也会一并移除。')) return;
+
+    var next = cards.filter(function (card) { return card.questionId !== questionId; });
+    if (!writeReviewCards(next)) {
+      toast('删除失败，请检查浏览器存储空间');
+      return;
+    }
+
+    var inQueue = reviewSession.queue.indexOf(questionId) !== -1;
+    if (inQueue) {
+      reviewSession.queue = reviewSession.queue.filter(function (id) { return id !== questionId; });
+      reviewSession.total = Math.max(reviewSession.answered, reviewSession.total - 1);
+    }
+
+    renderAll();
+    toast('已删除「' + title + '」');
+  }
+
+  function dailyLimitLabel(value) {
+    for (var i = 0; i < DAILY_LIMIT_OPTIONS.length; i++) {
+      if (DAILY_LIMIT_OPTIONS[i].value === value) return DAILY_LIMIT_OPTIONS[i].label;
+    }
+    return value === 0 ? '不限' : value + ' 题';
+  }
+
+  function setDailyLimit(value) {
+    if (!writeDailyLimit(value)) {
+      toast('保存失败，请检查浏览器存储空间');
+      return;
+    }
+    resetReviewSession();
+    renderAll();
+    toast('每日复习上限已设为 ' + dailyLimitLabel(value));
+  }
+
   function renderSettings() {
     var countEl = document.getElementById('settingsCount');
     if (countEl) countEl.textContent = readReviewCards().length + ' 条记录';
 
-    var limitEl = document.getElementById('dailyLimitSelect');
-    if (limitEl) limitEl.value = String(readDailyLimit());
+    var limit = readDailyLimit();
+    var limitLabel = document.getElementById('limitLabel');
+    var limitMenu = document.getElementById('limitMenu');
+    if (limitLabel) limitLabel.textContent = dailyLimitLabel(limit);
+    if (limitMenu) {
+      limitMenu.innerHTML = DAILY_LIMIT_OPTIONS.map(function (option) {
+        return pickerItemHtml(option.value, option.value === limit, option.label);
+      }).join('');
+    }
   }
 
   function findQuestion(book, lecture, number) {
@@ -3053,7 +3139,7 @@
   }
 
   function closePickers() {
-    ['source', 'book', 'lecture'].forEach(function (key) {
+    ['source', 'book', 'lecture', 'limit'].forEach(function (key) {
       document.getElementById(key + 'Trigger').setAttribute('aria-expanded', 'false');
       document.getElementById(key + 'Menu').hidden = true;
     });
@@ -3076,6 +3162,11 @@
       fillLectures(true);
       renderPickers();
       onFilterChange();
+      return;
+    }
+
+    if (kind === 'limit') {
+      setDailyLimit(parseInt(value, 10));
       return;
     }
 
@@ -3165,6 +3256,7 @@
       subject ? '    <span class="pill pill-primary">' + esc(subject) + '</span>' : '',
       lecture ? '    <span class="pill pill-muted">' + esc(lecture) + '</span>' : '',
       '    <time class="record-time mono">错于 ' + esc(record.lastWrongAt || record.createdAt || '') + '</time>',
+      '    <button class="record-del" type="button" data-del-record="' + esc(record.questionId) + '" aria-label="删除这道错题">删除</button>',
       '  </div>',
       '  <h3 class="record-title">' + esc(title) + '</h3>',
       content ? '  <div class="stem">' + stemHtml(content) + '</div>' : '',
@@ -3585,16 +3677,7 @@
   });
   document.getElementById('importFile').addEventListener('change', importBackupFile);
   document.getElementById('clearData').addEventListener('click', clearAllData);
-  document.getElementById('dailyLimitSelect').addEventListener('change', function () {
-    var value = this.value;
-    if (!writeDailyLimit(value)) {
-      toast('保存失败，请检查浏览器存储空间');
-      return;
-    }
-    resetReviewSession();
-    renderAll();
-    toast('每日复习上限已设为 ' + (value === '0' ? '不限' : value + ' 题'));
-  });
+  bindPicker('limitTrigger', 'limitMenu', 'limit');
 
   document.addEventListener('click', function (event) {
     var gotoEntry = event.target.closest('[data-action="goto-entry"]');
@@ -3611,6 +3694,9 @@
 
     var continueBtn = event.target.closest('[data-action="continue-review"]');
     if (continueBtn) continueReview();
+
+    var delBtn = event.target.closest('[data-del-record]');
+    if (delBtn) deleteRecord(delBtn.getAttribute('data-del-record'));
   });
 
   document.getElementById('findBtn').addEventListener('click', function () {
