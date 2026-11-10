@@ -2069,6 +2069,7 @@
         <div class="settings-actions">
           <button class="btn btn-primary btn-block ripple" type="button" id="exportBackup">导出备份</button>
           <button class="btn btn-tonal btn-block ripple" type="button" id="importBackup">导入备份</button>
+          <button class="btn btn-tonal btn-block ripple" type="button" id="cleanOrphans">清理失效记录</button>
           <button class="btn btn-danger btn-block ripple" type="button" id="clearData">清空所有数据</button>
         </div>
 
@@ -2575,6 +2576,32 @@
     };
     reader.readAsText(file);
     input.value = '';
+  }
+
+  /* 清理题库里找不到题目、也没有自存题干的记录（多为旧版导入的纯题号数据） */
+  function cleanupOrphanCards() {
+    var cards = readReviewCards();
+    var orphans = cards.filter(function (card) {
+      return !bankById(card.questionId) && !String(card.content || '').trim();
+    });
+
+    if (!orphans.length) {
+      toast('没有需要清理的记录');
+      return;
+    }
+    if (!window.confirm('题库中找不到这 ' + orphans.length + ' 条记录对应的题目，确定删除吗？')) return;
+
+    var kept = cards.filter(function (card) {
+      return orphans.indexOf(card) === -1;
+    });
+    if (!writeReviewCards(kept)) {
+      toast('删除失败，请检查浏览器存储空间');
+      return;
+    }
+
+    resetReviewSession();
+    renderAll();
+    toast('已清理 ' + orphans.length + ' 条失效记录');
   }
 
   function clearAllData() {
@@ -3718,6 +3745,7 @@
     document.getElementById('importFile').click();
   });
   document.getElementById('importFile').addEventListener('change', importBackupFile);
+  document.getElementById('cleanOrphans').addEventListener('click', cleanupOrphanCards);
   document.getElementById('clearData').addEventListener('click', clearAllData);
   bindPicker('limitTrigger', 'limitMenu', 'limit');
 
