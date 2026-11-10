@@ -681,6 +681,17 @@
     animation: rise .4s cubic-bezier(.2, .75, .25, 1) both;
   }
 
+  .stem-missing {
+    margin: 8px 0 0;
+    padding: 12px 14px;
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--radius-m);
+    background: #FBF9F2;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--ink-3);
+  }
+
   .stem {
     margin-top: 8px;
     padding: 14px 16px;
@@ -3346,17 +3357,6 @@
     reviewSession = { total: 0, answered: 0, queue: [], started: false };
   }
 
-  function reviewableDue() {
-    return dueReviewCards().filter(function (card) {
-      var bank = bankById(card.questionId);
-      if (!bank && !card.content) {
-        console.warn('[review] 题目已不在题库，跳过：', card.questionId);
-        return false;
-      }
-      return true;
-    });
-  }
-
   /* 到期队列按 nextReviewDate 升序（越早到期越靠前），再按每日上限截取 */
   function buildDailyQueue(due) {
     var limit = readDailyLimit();
@@ -3365,7 +3365,7 @@
 
   /* 按会话队列顺序取出仍然到期的卡片，避免上限外题目混入 */
   function sessionQueueCards() {
-    var due = reviewableDue();
+    var due = dueReviewCards();
     var map = {};
     due.forEach(function (card) { map[card.questionId] = card; });
     return reviewSession.queue.map(function (id) {
@@ -3404,7 +3404,7 @@
         }).join('')
         : '<span class="reason-chip is-empty">未记录错因</span>',
       '  </div>',
-      content ? '  <div class="stem" id="reviewStem">' + stemHtml(content) + '</div>' : '',
+      content ? '  <div class="stem" id="reviewStem">' + stemHtml(content) + '</div>' : '  <p class="stem-missing">题库中暂无此题题干，请对照纸质题册</p>',
       '  <p class="review-due mono">' + (card.lastReviewDate ? '上次重做 ' + esc(card.lastReviewDate) : '首次重做') + ' · 已错 ' + (card.wrongCount || 1) + ' 次</p>',
       '  <button class="btn-outlined ripple" type="button" data-action="toggle-answer" aria-expanded="false" aria-controls="reviewAnswer">显示答案</button>',
       '  <div class="answer-box" id="reviewAnswer" hidden>' + answerText + '</div>',
@@ -3485,7 +3485,7 @@
 
     var mount = document.getElementById('reviewMount');
     var cards = readReviewCards();
-    var due = reviewableDue();
+    var due = dueReviewCards();
 
     renderCurve(cards);
 
@@ -3589,7 +3589,7 @@
 
   /* 完成本批后，把上限外仍在到期的题目一次性加载进来 */
   function continueReview() {
-    var rest = reviewableDue();
+    var rest = dueReviewCards();
     if (!rest.length) return;
     reviewSession.queue = rest.map(function (card) { return card.questionId; });
     reviewSession.total = reviewSession.answered + rest.length;
@@ -3638,7 +3638,7 @@
     renderAll();
 
     var remainingInBatch = sessionQueueCards().length;
-    var leftover = reviewableDue().length - remainingInBatch;
+    var leftover = dueReviewCards().length - remainingInBatch;
     if (remainingInBatch) toast('已记录 · 本批还剩 ' + remainingInBatch + ' 题');
     else if (leftover > 0) toast('本批已完成 · 还有 ' + leftover + ' 题可继续加练');
     else toast('今日重做完成，共 ' + reviewSession.answered + ' 题');

@@ -2,7 +2,7 @@
  * 更新策略：index.html 网络优先（在线时始终拿最新页面），其余资源缓存优先。
  * 资源有变化时把 CACHE_NAME 升到 v4、v5…，激活阶段会自动清理旧缓存。
  */
-const CACHE_NAME = 'cuoti-shell-v4';
+const CACHE_NAME = 'cuoti-shell-v5';
 const CORE_ASSETS = [
   './',
   './index.html',
