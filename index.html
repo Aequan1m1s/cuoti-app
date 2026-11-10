@@ -1714,6 +1714,35 @@
     outline-offset: 3px;
   }
 
+  .reason-custom {
+    position: relative;
+    margin: 2px 0 12px;
+  }
+
+  .reason-custom input {
+    width: 100%;
+    height: 48px;
+    padding: 0 14px;
+    border: 1px dashed var(--line-strong);
+    border-radius: 14px;
+    background: #FFFEFA;
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    transition: border-color .2s, background .2s;
+  }
+
+  .reason-custom input::placeholder { color: var(--ink-3); }
+
+  .reason-custom input:focus {
+    outline: none;
+    border-style: solid;
+    border-color: rgba(47, 93, 80, .42);
+    background: #FFFFFF;
+  }
+
+  .reason-custom input:disabled { opacity: .5; }
+
   .sheet-hint {
     margin: 0 2px 14px;
     min-height: 18px;
@@ -2098,7 +2127,12 @@
     <button class="reason-pill" type="button" data-reason="方法选择错误" aria-pressed="false">方法选择错误</button>
   </div>
 
-  <p class="sheet-hint" id="sheetHint">选择一个错因后即可保存</p>
+  <div class="reason-custom">
+    <input type="text" id="reasonCustomInput" maxlength="20" autocomplete="off"
+      placeholder="或手动输入错因，如：单位没统一" aria-label="手动输入错因">
+  </div>
+
+  <p class="sheet-hint" id="sheetHint">选择一个错因，或手动输入后即可保存</p>
 
   <div class="sheet-actions">
     <button class="btn btn-tonal ripple" type="button" id="sheetCancel">取消</button>
@@ -2653,6 +2687,7 @@
   var currentQuestion = null;
   var pendingQuestion = null;
   var selectedReason = '';
+  var lastPillReason = '';
   var lastFocused = null;
 
   function renderQuestion(question) {
@@ -2823,17 +2858,20 @@
 
     pendingQuestion = question;
     selectedReason = '';
+    lastPillReason = '';
     lastFocused = document.activeElement;
 
     document.getElementById('sheetContext').textContent =
       question.book + ' · ' + question.lecture + ' · ' + question.type + ' ' + question.number;
+
+    document.getElementById('reasonCustomInput').value = '';
 
     document.querySelectorAll('#reasonGrid [data-reason]').forEach(function (pill) {
       pill.setAttribute('aria-pressed', 'false');
     });
 
     document.getElementById('sheetConfirm').disabled = true;
-    document.getElementById('sheetHint').textContent = '选择一个错因后即可保存';
+    document.getElementById('sheetHint').textContent = '选择一个错因，或手动输入后即可保存';
 
     backdrop.classList.add('is-open');
     sheet.classList.add('is-open');
@@ -2855,6 +2893,7 @@
 
     pendingQuestion = null;
     selectedReason = '';
+    lastPillReason = '';
 
     if (restoreFocus && lastFocused && typeof lastFocused.focus === 'function') {
       lastFocused.focus({ preventScroll: true });
@@ -2863,9 +2902,10 @@
   }
 
   function confirmReasonSave() {
-    if (!pendingQuestion || !selectedReason) return;
+    if (!pendingQuestion) return;
+    var reason = selectedReason.trim();
+    if (!reason) return;
     var question = pendingQuestion;
-    var reason = selectedReason;
 
     if (!addQuestionToBook(question, reason)) {
       closeReasonSheet(false);
@@ -3749,17 +3789,52 @@
   });
 
   /* 错因面板事件 */
+  var reasonCustomInput = document.getElementById('reasonCustomInput');
+
+  function setReasonHint() {
+    document.getElementById('sheetConfirm').disabled = !selectedReason;
+    document.getElementById('sheetHint').textContent = selectedReason
+      ? '已选择：' + selectedReason
+      : '选择一个错因，或手动输入后即可保存';
+  }
+
   document.getElementById('reasonGrid').addEventListener('click', function (event) {
     var pill = event.target.closest('[data-reason]');
     if (!pill) return;
 
     selectedReason = pill.getAttribute('data-reason');
+    lastPillReason = selectedReason;
+    reasonCustomInput.value = '';
     document.querySelectorAll('#reasonGrid [data-reason]').forEach(function (item) {
       item.setAttribute('aria-pressed', item === pill ? 'true' : 'false');
     });
 
-    document.getElementById('sheetConfirm').disabled = false;
-    document.getElementById('sheetHint').textContent = '已选择：' + selectedReason;
+    setReasonHint();
+  });
+
+  reasonCustomInput.addEventListener('input', function () {
+    var value = this.value.trim();
+    selectedReason = value;
+
+    document.querySelectorAll('#reasonGrid [data-reason]').forEach(function (item) {
+      var match = value && item.getAttribute('data-reason') === value;
+      item.setAttribute('aria-pressed', match ? 'true' : 'false');
+    });
+
+    if (!value && lastPillReason) {
+      selectedReason = lastPillReason;
+      document.querySelectorAll('#reasonGrid [data-reason]').forEach(function (item) {
+        item.setAttribute('aria-pressed', item.getAttribute('data-reason') === lastPillReason ? 'true' : 'false');
+      });
+    }
+
+    setReasonHint();
+  });
+
+  reasonCustomInput.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (!document.getElementById('sheetConfirm').disabled) confirmReasonSave();
   });
 
   document.getElementById('sheetConfirm').addEventListener('click', confirmReasonSave);
