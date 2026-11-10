@@ -2706,7 +2706,10 @@
     return readReviewCards().filter(function (card) {
       return (card.reviewStage || 0) < 3 && card.nextReviewDate && card.nextReviewDate <= now && card.lastReviewDate !== now;
     }).sort(function (a, b) {
-      return String(a.nextReviewDate) < String(b.nextReviewDate) ? -1 : 1;
+      var left = String(a.nextReviewDate || '');
+      var right = String(b.nextReviewDate || '');
+      if (left === right) return 0;
+      return left < right ? -1 : 1;
     });
   }
 
