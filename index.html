@@ -1102,23 +1102,23 @@
 
   .review-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
     margin-top: 16px;
   }
 
   .grade-btn {
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    min-height: 60px;
-    padding: 8px 12px;
+    gap: 4px;
+    min-height: 74px;
+    padding: 10px 4px;
     border: 0;
-    border-radius: 999px;
+    border-radius: 18px;
     font-family: var(--font-ui);
-    text-align: left;
+    text-align: center;
     cursor: pointer;
     position: relative;
     overflow: hidden;
@@ -1130,35 +1130,42 @@
   .grade-icon {
     display: grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
-    flex: 0 0 28px;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
     border-radius: 50%;
     background: rgba(255, 255, 255, .18);
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 700;
   }
 
   .grade-copy {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     gap: 1px;
   }
 
-  .grade-label { font-size: 16px; font-weight: 700; letter-spacing: .01em; }
+  .grade-label { font-size: 14px; font-weight: 700; letter-spacing: .01em; white-space: nowrap; }
 
   .grade-hint {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 9.5px;
     letter-spacing: .04em;
     opacity: .72;
+    white-space: nowrap;
   }
 
   .grade-again {
     background: #B3261E;
     color: #FFFFFF;
     box-shadow: 0 10px 22px -16px rgba(179, 38, 30, .9);
+  }
+
+  .grade-fuzzy {
+    background: var(--accent);
+    color: #FFFFFF;
+    box-shadow: 0 10px 22px -16px rgba(184, 116, 59, .9);
   }
 
   .grade-good {
@@ -1982,7 +1989,7 @@
           </div>
           <span class="pill pill-muted mono" id="curveTotal">0 题</span>
         </div>
-        <p class="curve-note">做对进一阶，间隔按 2 → 7 → 14 天拉长；做错回到第 0 阶。</p>
+        <p class="curve-note">做对进一阶，间隔按 2 → 7 → 14 天拉长；做错回到第 0 阶；不熟保持阶数，4 天后再来。</p>
         <div class="curve-plot" id="curvePlot"></div>
         <div class="curve-stages" id="curveStages"></div>
       </article>
@@ -3445,6 +3452,10 @@
       '      <span class="grade-icon">✕</span>',
       '      <span class="grade-copy"><span class="grade-label">做错了</span><span class="grade-hint">2 天后</span></span>',
       '    </button>',
+      '    <button class="grade-btn grade-fuzzy ripple" type="button" data-result="fuzzy">',
+      '      <span class="grade-icon">≈</span>',
+      '      <span class="grade-copy"><span class="grade-label">不熟</span><span class="grade-hint">4 天后</span></span>',
+      '    </button>',
       '    <button class="grade-btn grade-good ripple" type="button" data-result="right">',
       '      <span class="grade-icon">✓</span>',
       '      <span class="grade-copy"><span class="grade-label">做对了</span><span class="grade-hint">' + rightHint + '</span></span>',
@@ -3644,7 +3655,11 @@
     if (!target) return;
 
     var todayStr = today();
-    if (result === 'wrong') {
+    if (result === 'fuzzy') {
+      /* 不熟：不升阶也不归零，不加错误次数，4 天后再来一次 */
+      target.nextReviewDate = addDays(todayStr, 4);
+      target.lastReviewDate = todayStr;
+    } else if (result === 'wrong') {
       target.reviewStage = 0;
       target.nextReviewDate = addDays(todayStr, 2);
       target.wrongCount = (target.wrongCount || 0) + 1;
