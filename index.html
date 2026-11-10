@@ -1100,6 +1100,17 @@
     color: var(--ink-3);
   }
 
+  .review-notice {
+    margin: 0 0 12px;
+    padding: 12px 14px;
+    border: 1px solid rgba(184, 116, 59, .38);
+    border-radius: var(--radius-m);
+    background: var(--accent-soft);
+    color: #6B4423;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
   .review-actions {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -1989,7 +2000,7 @@
           </div>
           <span class="pill pill-muted mono" id="curveTotal">0 题</span>
         </div>
-        <p class="curve-note">做对进一阶，间隔按 2 → 7 → 14 天拉长；做错回到第 0 阶；不熟保持阶数，4 天后再来。</p>
+        <p class="curve-note">做对进一阶，间隔按 2 → 7 → 14 天拉长；做错回到第 0 阶；不熟按当前阶数顺延 2 / 4 / 7 天。</p>
         <div class="curve-plot" id="curvePlot"></div>
         <div class="curve-stages" id="curveStages"></div>
       </article>
@@ -2604,7 +2615,8 @@
       toast('没有需要清理的记录');
       return;
     }
-    if (!window.confirm('题库中找不到这 ' + orphans.length + ' 条记录对应的题目，确定删除吗？')) return;
+    if (!window.confirm('题库中找不到这 ' + orphans.length + ' 条记录对应的题目，删除后无法恢复。\n建议先导出备份。是否继续？')) return;
+    if (!window.confirm('再次确认：删除这 ' + orphans.length + ' 条记录？')) return;
 
     var kept = cards.filter(function (card) {
       return orphans.indexOf(card) === -1;
@@ -3398,10 +3410,10 @@
     renderMath(mount);
   }
 
-  var reviewSession = { total: 0, answered: 0, queue: [], started: false };
+  var reviewSession = { total: 0, answered: 0, queue: [], started: false, note: '' };
 
   function resetReviewSession() {
-    reviewSession = { total: 0, answered: 0, queue: [], started: false };
+    reviewSession = { total: 0, answered: 0, queue: [], started: false, note: '' };
   }
 
   /* 到期队列按 nextReviewDate 升序（越早到期越靠前），再按每日上限截取 */
@@ -3430,6 +3442,8 @@
     var stage = Math.min(3, card.reviewStage || 0);
     var reasons = (card.reasons || []).filter(function (reason) { return reason; });
     var rightHint = stage === 0 ? '7 天后' : (stage === 1 ? '14 天后' : '标记已掌握');
+    /* 不熟按当前阶段顺延：第 0 阶 2 天、第 1 阶 4 天、第 2 阶 7 天 */
+    var fuzzyDays = stage === 0 ? 2 : (stage === 1 ? 4 : 7);
     var heading = [lecture, (type ? type + ' ' : '题 ') + number].filter(Boolean).join(' · ');
 
     var answer = card.answer || (bank && bank.answer) || '';
@@ -3462,7 +3476,7 @@
       '    </button>',
       '    <button class="grade-btn grade-fuzzy ripple" type="button" data-result="fuzzy">',
       '      <span class="grade-icon">≈</span>',
-      '      <span class="grade-copy"><span class="grade-label">不熟</span><span class="grade-hint">4 天后</span></span>',
+      '      <span class="grade-copy"><span class="grade-label">不熟</span><span class="grade-hint">' + fuzzyDays + ' 天后</span></span>',
       '    </button>',
       '    <button class="grade-btn grade-good ripple" type="button" data-result="right">',
       '      <span class="grade-icon">✓</span>',
@@ -3471,6 +3485,13 @@
       '  </div>',
       '</article>'
     ].join('\n');
+  }
+
+  /* 连错提示：常驻在复习区顶部，直到下一次判定 */
+  function reviewNoticeHtml() {
+    return reviewSession.note
+      ? '  <p class="review-notice" role="status">' + esc(reviewSession.note) + '</p>'
+      : '';
   }
 
   var CURVE_STAGES = [
@@ -3590,7 +3611,7 @@
           doneButtons.push('  <button class="btn btn-tonal ripple" type="button" data-action="continue-review">继续加练剩余 ' + leftover + ' 题</button>');
         }
 
-        mount.innerHTML = [
+        mount.innerHTML = reviewNoticeHtml() + [
           '<div class="empty review-empty">',
           '  <svg class="empty-illustration" viewBox="0 0 96 96" aria-hidden="true">',
           '    <rect x="12" y="16" width="72" height="66" rx="16" fill="#ECF3EE"/>',
@@ -3630,7 +3651,7 @@
 
     title.textContent = '重做第 ' + current + ' 题';
     desc.textContent = '共 ' + total + ' 题 · 做对进一阶，做错回到第 0 阶';
-    mount.innerHTML = reviewCardHtml(queue[0]);
+    mount.innerHTML = reviewNoticeHtml() + reviewCardHtml(queue[0]);
 
     var stem = document.getElementById('reviewStem');
     if (stem) renderMath(stem);
@@ -3664,8 +3685,10 @@
 
     var todayStr = today();
     if (result === 'fuzzy') {
-      /* 不熟：不升阶也不归零，不加错误次数，4 天后再来一次 */
-      target.nextReviewDate = addDays(todayStr, 4);
+      /* 不熟：不升阶也不归零，按当前阶段顺延（0 阶 2 天 / 1 阶 4 天 / 2 阶 7 天） */
+      var stageBefore = Math.min(3, target.reviewStage || 0);
+      var fuzzyDays = stageBefore === 0 ? 2 : (stageBefore === 1 ? 4 : 7);
+      target.nextReviewDate = addDays(todayStr, fuzzyDays);
       target.lastReviewDate = todayStr;
     } else if (result === 'wrong') {
       target.reviewStage = 0;
@@ -3690,6 +3713,10 @@
     reviewSession.queue = reviewSession.queue.filter(function (id) {
       return id !== target.questionId;
     });
+    reviewSession.note = '';
+    if (result === 'wrong' && (target.wrongCount || 0) >= 3) {
+      reviewSession.note = '这题已经错了 ' + target.wrongCount + ' 次了，别死磕：建议点「显示答案」看解析，并抄写一遍步骤，后天再来。';
+    }
     renderAll();
 
     var remainingInBatch = sessionQueueCards().length;
