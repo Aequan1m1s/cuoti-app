@@ -3300,6 +3300,8 @@
     var stageLabels = ['待第一次重做', '已过第一次', '已过第二次', '已掌握'];
     var reasons = (record.reasons || []).join(' / ');
     var source = record.source === 'manual' ? '手动录入' : (record.source ? sourceLabel(record.source) : '题库录入');
+    /* 来源与左上角科目重复时不再显示，避免同一张卡片重复出现书名 */
+    var showSource = source && source !== subject;
 
     return [
       '<article class="record" style="--i:' + index + '">',
@@ -3318,7 +3320,7 @@
       reasons ? '      <span class="pill pill-accent">' + esc(reasons) + '</span>' : '',
       '      <span class="pill pill-muted mono">' + esc(record.nextReviewDate ? '下次 ' + record.nextReviewDate : '不再推送') + '</span>',
       '    </div>',
-      '    <span class="record-id mono">' + esc(source) + '</span>',
+      showSource ? '    <span class="record-id mono">' + esc(source) + '</span>' : '',
       '  </div>',
       '</article>'
     ].join('\n');
