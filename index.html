@@ -1111,6 +1111,75 @@
     line-height: 1.7;
   }
 
+  .reason-edit {
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    background: #FFFEFA;
+  }
+
+  .reason-edit-label {
+    margin: 0 0 10px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--ink-2);
+  }
+
+  .reason-edit-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .reason-edit-grid .reason-pill {
+    min-height: 38px;
+    padding: 0 13px;
+    font-size: 13px;
+  }
+
+  .reason-edit-custom {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .reason-edit-custom input {
+    flex: 1;
+    min-width: 0;
+    height: 40px;
+    padding: 0 12px;
+    border: 1px dashed var(--line-strong);
+    border-radius: 12px;
+    background: #FFFFFF;
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-size: 13.5px;
+  }
+
+  .reason-edit-custom input::placeholder { color: var(--ink-3); }
+
+  .reason-edit-custom input:focus {
+    outline: none;
+    border-style: solid;
+    border-color: rgba(47, 93, 80, .42);
+  }
+
+  .reason-edit-add {
+    flex: 0 0 auto;
+    height: 40px;
+    padding: 0 16px;
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    background: var(--paper);
+    color: var(--ink-2);
+    font-family: var(--font-ui);
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+
+  .reason-edit-add:active { transform: scale(.96); }
+
   .review-actions {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -3410,10 +3479,10 @@
     renderMath(mount);
   }
 
-  var reviewSession = { total: 0, answered: 0, queue: [], started: false, note: '' };
+  var reviewSession = { total: 0, answered: 0, queue: [], started: false, note: '', hold: null };
 
   function resetReviewSession() {
-    reviewSession = { total: 0, answered: 0, queue: [], started: false, note: '' };
+    reviewSession = { total: 0, answered: 0, queue: [], started: false, note: '', hold: null };
   }
 
   /* 到期队列按 nextReviewDate 升序（越早到期越靠前），再按每日上限截取 */
@@ -3432,7 +3501,38 @@
     }).filter(Boolean);
   }
 
-  function reviewCardHtml(card) {
+  var REASON_OPTIONS = ['概念不清', '公式记错', '计算失误', '思路没想到', '审题错误', '方法选择错误'];
+
+  /* 做错后卡片原地停留：答案展开 + 错因多选（累计保存）+ 下一题 */
+  function holdReasonEditorHtml(card) {
+    var chosen = (card.reasons || []).filter(function (reason) { return reason; });
+    /* 手动输入过的错因也排成标签，方便再次点击取消 */
+    var extras = chosen.filter(function (reason) {
+      return REASON_OPTIONS.indexOf(reason) === -1;
+    });
+    var pills = REASON_OPTIONS.concat(extras).map(function (reason) {
+      var on = chosen.indexOf(reason) !== -1;
+      return '      <button class="reason-pill" type="button" data-hold-reason="' + esc(reason) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(reason) + '</button>';
+    }).join('\n');
+
+    return [
+      '  <div class="reason-edit">',
+      '    <p class="reason-edit-label">这次错在哪？可多选，会累计保存；不想记也可以直接下一题</p>',
+      '    <div class="reason-edit-grid" role="group" aria-label="错因选项">',
+      pills,
+      '    </div>',
+      '    <div class="reason-edit-custom">',
+      '      <input type="text" id="holdReasonInput" maxlength="20" autocomplete="off" placeholder="其他原因，回车添加" aria-label="手动输入错因">',
+      '      <button class="reason-edit-add" type="button" data-action="add-hold-reason">添加</button>',
+      '    </div>',
+      '  </div>',
+      '  <button class="btn btn-primary btn-block ripple" type="button" data-action="finish-hold">下一题</button>'
+    ].join('\n');
+  }
+
+  function reviewCardHtml(card, options) {
+    options = options || {};
+    var held = !!options.held;
     var bank = bankById(card.questionId);
     var source = card.source === 'manual' ? '手动录入' : sourceLabel(card.source || '1000A');
     var lecture = card.lecture || (bank && bank.lecture) || '';
@@ -3467,22 +3567,26 @@
       '  </div>',
       content ? '  <div class="stem" id="reviewStem">' + stemHtml(content) + '</div>' : '  <p class="stem-missing">题库中暂无此题题干，请对照纸质题册</p>',
       '  <p class="review-due mono">' + (card.lastReviewDate ? '上次重做 ' + esc(card.lastReviewDate) : '首次重做') + ' · 已错 ' + (card.wrongCount || 1) + ' 次</p>',
-      '  <button class="btn-outlined ripple" type="button" data-action="toggle-answer" aria-expanded="false" aria-controls="reviewAnswer">显示答案</button>',
-      '  <div class="answer-box" id="reviewAnswer" hidden>' + answerText + '</div>',
-      '  <div class="review-actions">',
-      '    <button class="grade-btn grade-again ripple" type="button" data-result="wrong">',
-      '      <span class="grade-icon">✕</span>',
-      '      <span class="grade-copy"><span class="grade-label">做错了</span><span class="grade-hint">2 天后</span></span>',
-      '    </button>',
-      '    <button class="grade-btn grade-fuzzy ripple" type="button" data-result="fuzzy">',
-      '      <span class="grade-icon">≈</span>',
-      '      <span class="grade-copy"><span class="grade-label">不熟</span><span class="grade-hint">' + fuzzyDays + ' 天后</span></span>',
-      '    </button>',
-      '    <button class="grade-btn grade-good ripple" type="button" data-result="right">',
-      '      <span class="grade-icon">✓</span>',
-      '      <span class="grade-copy"><span class="grade-label">做对了</span><span class="grade-hint">' + rightHint + '</span></span>',
-      '    </button>',
-      '  </div>',
+      held ? '' : '  <button class="btn-outlined ripple" type="button" data-action="toggle-answer" aria-expanded="false" aria-controls="reviewAnswer">显示答案</button>',
+      held
+        ? '  <div class="answer-box" id="reviewAnswer">' + answerText + '</div>'
+        : '  <div class="answer-box" id="reviewAnswer" hidden>' + answerText + '</div>',
+      held ? holdReasonEditorHtml(card) : [
+        '  <div class="review-actions">',
+        '    <button class="grade-btn grade-again ripple" type="button" data-result="wrong">',
+        '      <span class="grade-icon">✕</span>',
+        '      <span class="grade-copy"><span class="grade-label">做错了</span><span class="grade-hint">2 天后</span></span>',
+        '    </button>',
+        '    <button class="grade-btn grade-fuzzy ripple" type="button" data-result="fuzzy">',
+        '      <span class="grade-icon">≈</span>',
+        '      <span class="grade-copy"><span class="grade-label">不熟</span><span class="grade-hint">' + fuzzyDays + ' 天后</span></span>',
+        '    </button>',
+        '    <button class="grade-btn grade-good ripple" type="button" data-result="right">',
+        '      <span class="grade-icon">✓</span>',
+        '      <span class="grade-copy"><span class="grade-label">做对了</span><span class="grade-hint">' + rightHint + '</span></span>',
+        '    </button>',
+        '  </div>'
+      ].join('\n'),
       '</article>'
     ].join('\n');
   }
@@ -3569,10 +3673,22 @@
     }
 
     var queue = sessionQueueCards();
+    /* 停留态的题目已不在到期队列里，需要直接从存储中取回 */
+    var heldCard = null;
+    if (reviewSession.hold) {
+      for (var h = 0; h < cards.length; h++) {
+        if (cards[h].questionId === reviewSession.hold.questionId) {
+          heldCard = cards[h];
+          break;
+        }
+      }
+      if (!heldCard) reviewSession.hold = null;
+    }
+    var held = !!heldCard;
     var leftover = Math.max(0, due.length - queue.length);
     var total = reviewSession.total;
     var answered = reviewSession.answered;
-    var current = queue.length ? Math.min(answered + 1, total) : answered;
+    var current = (queue.length || held) ? Math.min(answered + 1, total) : answered;
     var percent = total ? Math.min(100, Math.round((answered / total) * 100)) : 0;
 
     document.getElementById('reviewProgressText').textContent = current + ' / ' + total;
@@ -3596,7 +3712,7 @@
     var title = document.getElementById('reviewTitle');
     var desc = document.getElementById('reviewDesc');
 
-    if (!queue.length) {
+    if (!held && !queue.length) {
       if (total > 0) {
         var mastered = cards.filter(isMastered).length;
         title.textContent = '今日重做完成';
@@ -3649,9 +3765,12 @@
       return;
     }
 
+    var activeCard = held ? heldCard : queue[0];
     title.textContent = '重做第 ' + current + ' 题';
-    desc.textContent = '共 ' + total + ' 题 · 做对进一阶，做错回到第 0 阶';
-    mount.innerHTML = reviewNoticeHtml() + reviewCardHtml(queue[0]);
+    desc.textContent = held
+      ? '这题刚做错，记一下错因再进入下一题'
+      : '共 ' + total + ' 题 · 做对进一阶，做错回到第 0 阶';
+    mount.innerHTML = reviewNoticeHtml() + reviewCardHtml(activeCard, { held: held });
 
     var stem = document.getElementById('reviewStem');
     if (stem) renderMath(stem);
@@ -3709,21 +3828,87 @@
       return;
     }
 
+    if (result === 'wrong') {
+      /* 原地停留：先记错因，点「下一题」才推进队列 */
+      reviewSession.hold = { questionId: target.questionId };
+      reviewSession.note = (target.wrongCount || 0) >= 3
+        ? '这题已经错了 ' + target.wrongCount + ' 次了，别死磕：建议点「显示答案」看解析，并抄写一遍步骤，后天再来。'
+        : '';
+      renderAll();
+      var holdInput = document.getElementById('holdReasonInput');
+      if (holdInput) holdInput.focus();
+      return;
+    }
+
     reviewSession.answered += 1;
     reviewSession.queue = reviewSession.queue.filter(function (id) {
       return id !== target.questionId;
     });
     reviewSession.note = '';
-    if (result === 'wrong' && (target.wrongCount || 0) >= 3) {
-      reviewSession.note = '这题已经错了 ' + target.wrongCount + ' 次了，别死磕：建议点「显示答案」看解析，并抄写一遍步骤，后天再来。';
-    }
     renderAll();
+    announceReviewProgress();
+  }
 
+  /* 停留态结束：记完错因，进入下一题 */
+  function finishHeldCard() {
+    var held = reviewSession.hold;
+    if (!held) return;
+    reviewSession.hold = null;
+    reviewSession.answered += 1;
+    reviewSession.queue = reviewSession.queue.filter(function (id) {
+      return id !== held.questionId;
+    });
+    renderAll();
+    announceReviewProgress();
+  }
+
+  function announceReviewProgress() {
     var remainingInBatch = sessionQueueCards().length;
     var leftover = dueReviewCards().length - remainingInBatch;
     if (remainingInBatch) toast('已记录 · 本批还剩 ' + remainingInBatch + ' 题');
     else if (leftover > 0) toast('本批已完成 · 还有 ' + leftover + ' 题可继续加练');
     else toast('今日重做完成，共 ' + reviewSession.answered + ' 题');
+  }
+
+  /* 停留态下修改错因：同一道题的错因累计保留，重复点击可撤销 */
+  function updateHeldReasons(mutator) {
+    var held = reviewSession.hold;
+    if (!held) return;
+    var list = readReviewCards();
+    var card = null;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].questionId === held.questionId) {
+        card = list[i];
+        break;
+      }
+    }
+    if (!card) return;
+    if (!Array.isArray(card.reasons)) card.reasons = [];
+    mutator(card);
+    if (!writeReviewCards(list)) {
+      toast('写入失败，请检查浏览器存储空间');
+      return;
+    }
+    renderReview();
+  }
+
+  function toggleHeldReason(reason) {
+    if (!reason) return;
+    updateHeldReasons(function (card) {
+      var index = card.reasons.indexOf(reason);
+      if (index === -1) card.reasons.push(reason);
+      else card.reasons.splice(index, 1);
+    });
+  }
+
+  function addHeldReason(value) {
+    var reason = String(value || '').trim();
+    if (!reason) return;
+    updateHeldReasons(function (card) {
+      if (card.reasons.indexOf(reason) === -1) card.reasons.push(reason);
+    });
+    var input = document.getElementById('holdReasonInput');
+    if (input) input.focus();
   }
 
   function renderStats(cards) {
@@ -3866,9 +4051,33 @@
       return;
     }
 
+    var holdPill = event.target.closest('[data-hold-reason]');
+    if (holdPill) {
+      toggleHeldReason(holdPill.getAttribute('data-hold-reason'));
+      return;
+    }
+
+    if (event.target.closest('[data-action="add-hold-reason"]')) {
+      var holdInput = document.getElementById('holdReasonInput');
+      addHeldReason(holdInput ? holdInput.value : '');
+      return;
+    }
+
+    if (event.target.closest('[data-action="finish-hold"]')) {
+      finishHeldCard();
+      return;
+    }
+
     var resultBtn = event.target.closest('[data-result]');
     if (!resultBtn) return;
     reviewResult(resultBtn.getAttribute('data-result'));
+  });
+
+  document.getElementById('reviewMount').addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter') return;
+    if (!event.target.matches('#holdReasonInput')) return;
+    event.preventDefault();
+    addHeldReason(event.target.value);
   });
 
   /* 错因面板事件 */
