@@ -1,15 +1,16 @@
-/* 阶 · 考研数学错题本 · Service Worker
+/* 数学错题本 · Service Worker
  * 更新策略：index.html 网络优先（在线时始终拿最新页面），其余资源缓存优先。
- * 资源有变化时把 CACHE_NAME 升到 jie-v2、jie-v3…，激活阶段会自动清理旧缓存。
+ * 资源有变化时把 CACHE_NAME 升到 jie-v4、jie-v5…，激活阶段会自动清理旧缓存。
  */
-const CACHE_NAME = 'jie-v2';
+const CACHE_NAME = 'jie-v3';
 const CORE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './all_questions.json',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './icon-512-maskable.png'
 ];
 
 self.addEventListener('message', (event) => {

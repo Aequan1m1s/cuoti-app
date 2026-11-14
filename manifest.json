@@ -1,6 +1,6 @@
 {
-  "name": "阶 · 考研数学错题本",
-  "short_name": "阶",
+  "name": "数学错题本",
+  "short_name": "数学错题本",
   "description": "移动端优先的考研错题收集与重刷工具",
   "lang": "zh-CN",
   "start_url": "./",
@@ -23,7 +23,7 @@
       "purpose": "any"
     },
     {
-      "src": "icon-512.png",
+      "src": "icon-512-maskable.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
