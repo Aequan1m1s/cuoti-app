@@ -1,8 +1,8 @@
-﻿/* 考研错题本 · Service Worker
+/* 阶 · 考研数学错题本 · Service Worker
  * 更新策略：index.html 网络优先（在线时始终拿最新页面），其余资源缓存优先。
- * 资源有变化时把 CACHE_NAME 升到 v6、v7…，激活阶段会自动清理旧缓存。
+ * 资源有变化时把 CACHE_NAME 升到 jie-v2、jie-v3…，激活阶段会自动清理旧缓存。
  */
-const CACHE_NAME = 'cuoti-shell-v12';
+const CACHE_NAME = 'jie-v1';
 const CORE_ASSETS = [
   './',
   './index.html',
