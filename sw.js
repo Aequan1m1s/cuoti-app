@@ -2,7 +2,7 @@
  * 更新策略：index.html 网络优先（在线时始终拿最新页面），其余资源缓存优先。
  * 资源有变化时把 CACHE_NAME 升到 jie-v4、jie-v5…，激活阶段会自动清理旧缓存。
  */
-const CACHE_NAME = 'jie-v3';
+const CACHE_NAME = 'jie-v4';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -49,7 +49,7 @@ self.addEventListener('fetch', (event) => {
 
   if (isShell) {
     event.respondWith(
-      fetch(request)
+      fetchWithTimeout(request, 4000)
         .then((response) => {
           if (response && response.ok) {
             const copy = response.clone();
@@ -59,7 +59,9 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => caches.match('./index.html').then((cached) => cached || caches.match('./')))
+        .catch(() => caches.match('./index.html')
+          .then((cached) => cached || caches.match('./'))
+          .then((cached) => cached || offlinePage()))
     );
     return;
   }
@@ -85,6 +87,31 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+/* 网络请求加超时：弱网或域名被劫持时不至于一直转圈 */
+function fetchWithTimeout(request, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    fetch(request).then(
+      (response) => { clearTimeout(timer); resolve(response); },
+      (error) => { clearTimeout(timer); reject(error); }
+    );
+  });
+}
+
+/* 首次安装且完全离线时，给一个能点重试的页面，而不是白屏 */
+function offlinePage() {
+  const html = '<!doctype html><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>数学错题本</title>' +
+    '<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;' +
+    'background:#F6F4EE;font-family:-apple-system,\'PingFang SC\',sans-serif;color:#3A3A34;text-align:center">' +
+    '<div style="padding:32px"><div style="font-size:20px;font-weight:700;margin-bottom:8px">暂时连不上服务器</div>' +
+    '<div style="font-size:14px;color:#7A7A70;margin-bottom:24px">请检查网络后再试</div>' +
+    '<button onclick="location.reload()" style="border:0;border-radius:999px;padding:12px 28px;' +
+    'background:#4d6658;color:#fff;font-size:15px">重新加载</button></div></body>';
+  return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
 
 
 

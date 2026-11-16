@@ -2330,7 +2330,10 @@
   var BANK_FILES = ['./all_questions.json'];
 
   function fetchBankFile(url) {
-    return fetch(url, { cache: 'no-cache' })
+    var controller = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, 8000) : null;
+    function clear() { if (timer) clearTimeout(timer); }
+    return fetch(url, { cache: 'no-cache', signal: controller ? controller.signal : undefined })
       .then(function (response) {
         if (!response.ok) throw new Error('HTTP ' + response.status);
         return response.json();
@@ -2339,6 +2342,13 @@
         var list = Array.isArray(data) ? data : (data && data.questions);
         if (!Array.isArray(list)) throw new Error('题库格式不正确');
         return list.map(normalizeQuestion).filter(Boolean);
+      })
+      .then(function (list) {
+        clear();
+        return list;
+      }, function (error) {
+        clear();
+        throw error;
       });
   }
 
