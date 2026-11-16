@@ -1083,6 +1083,103 @@
 
   .ring-fill { transition: stroke-dashoffset .45s cubic-bezier(.2, .75, .25, 1); }
 
+  /* 今日已刷：手账台账式计数条 */
+  .brush-card {
+    margin-top: 12px;
+    padding: 16px 18px 14px;
+  }
+
+  .brush-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .brush-card .eyebrow {
+    margin: 0;
+    color: var(--primary);
+  }
+
+  .brush-value {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin: 2px 0 0;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .brush-value strong {
+    font-size: 34px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -.02em;
+    color: var(--primary-deep);
+  }
+
+  .brush-unit {
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+
+  #brushStreak.is-empty {
+    color: var(--ink-3);
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+
+  .brush-bars {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    align-items: end;
+    gap: 6px;
+    height: 64px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--line-strong);
+  }
+
+  .brush-day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    height: 100%;
+  }
+
+  .brush-bar {
+    width: 100%;
+    max-width: 18px;
+    height: 2px;
+    border-radius: 3px 3px 1px 1px;
+    background: var(--line-strong);
+    transition: height .5s cubic-bezier(.2, .75, .25, 1), background .3s ease;
+  }
+
+  .brush-day[data-empty="false"] .brush-bar { background: rgba(47, 93, 80, .38); }
+  .brush-day[data-today="true"][data-empty="false"] .brush-bar { background: var(--primary); }
+
+  .brush-label {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: .04em;
+    color: var(--ink-3);
+  }
+
+  .brush-day[data-today="true"] .brush-label {
+    color: var(--primary-deep);
+    font-weight: 600;
+  }
+
+  .brush-note {
+    margin: 10px 0 0;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+
   /* ---------- 复习卡片 ---------- */
   .review-card {
     margin-top: 14px;
@@ -2058,6 +2155,18 @@
         </div>
       </article>
 
+      <article class="card brush-card" aria-label="每日刷题量">
+        <div class="brush-head">
+          <div>
+            <p class="eyebrow">TODAY · 已刷</p>
+            <p class="brush-value"><strong id="brushCount">0</strong><span class="brush-unit">题</span></p>
+          </div>
+          <span class="pill pill-muted mono" id="brushStreak">连续 0 天</span>
+        </div>
+        <div class="brush-bars" id="brushBars"></div>
+        <p class="brush-note">做错、不熟、做对各计 1 题；每天零点重新计数，下方为最近 7 天。</p>
+      </article>
+
       <div id="reviewMount" aria-live="polite"></div>
 
       <article class="card review-curve" aria-label="重刷曲线：各阶段题目分布">
@@ -2258,6 +2367,7 @@
   var LAST_QUERY_KEY = 'cuoti.lastQuery.v1';
   var DAILY_LIMIT_KEY = 'daily_review_limit';
   var REVIEW_SESSION_KEY = 'cuoti.reviewSession.v1';
+  var DAILY_BRUSH_KEY = 'cuoti.dailyBrush.v1';
   var DEFAULT_DAILY_LIMIT = 20;
   var DAILY_LIMIT_OPTIONS = [
     { value: 10, label: '10 题' },
@@ -2564,6 +2674,54 @@
     }
   }
 
+  /* 今日已刷：以「日期 → 题数」的形式按天记账，只保留最近 60 天 */
+  var BRUSH_KEEP_DAYS = 60;
+
+  function readBrushLog() {
+    try {
+      var raw = localStorage.getItem(DAILY_BRUSH_KEY);
+      if (!raw) return {};
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      var log = {};
+      Object.keys(parsed).forEach(function (key) {
+        var count = Number(parsed[key]);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(key) && isFinite(count) && count > 0) {
+          log[key] = Math.floor(count);
+        }
+      });
+      return log;
+    } catch (error) {
+      console.warn('[storage] 读取刷题记录失败：', error);
+      return {};
+    }
+  }
+
+  function writeBrushLog(log) {
+    try {
+      localStorage.setItem(DAILY_BRUSH_KEY, JSON.stringify(log));
+      return true;
+    } catch (error) {
+      console.warn('[storage] 写入刷题记录失败：', error);
+      return false;
+    }
+  }
+
+  /* 每判定一题（做错 / 不熟 / 做对）给今天记 1 题 */
+  function bumpDailyBrush() {
+    var log = readBrushLog();
+    var key = today();
+    log[key] = (log[key] || 0) + 1;
+
+    var cutoff = addDays(key, -BRUSH_KEEP_DAYS);
+    Object.keys(log).forEach(function (day) {
+      if (day < cutoff) delete log[day];
+    });
+
+    writeBrushLog(log);
+    return log[key];
+  }
+
   /* 旧的 cuoti.records.v1 自动迁移到 review_cards_v2，原键保留不删 */
   function migrateLegacyCards() {
     try {
@@ -2714,6 +2872,7 @@
     if (!window.confirm('确定清空所有错题数据？此操作无法撤销，建议先导出备份。')) return;
     localStorage.removeItem(STORE_KEY);
     localStorage.removeItem(LEGACY_STORE_KEY);
+    localStorage.removeItem(DAILY_BRUSH_KEY);
     resetReviewSession();
     renderAll();
     toast('已清空所有错题数据');
@@ -3654,6 +3813,67 @@
       : '';
   }
 
+  /* ===== 今日已刷：大字计数 + 最近 7 天柱状图 ===== */
+  var BRUSH_WEEK_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
+
+  function weekdayOf(dateStr) {
+    var parts = String(dateStr).split('-');
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getDay();
+  }
+
+  /* 连续天数：今天没刷就从昨天起算，不中断已有的连续记录 */
+  function brushStreakOf(log) {
+    var cursor = today();
+    if (!log[cursor]) cursor = addDays(cursor, -1);
+    var streak = 0;
+    while (log[cursor] > 0) {
+      streak += 1;
+      cursor = addDays(cursor, -1);
+    }
+    return streak;
+  }
+
+  function renderDailyBrush() {
+    var countEl = document.getElementById('brushCount');
+    var streakEl = document.getElementById('brushStreak');
+    var barsEl = document.getElementById('brushBars');
+    if (!countEl || !streakEl || !barsEl) return;
+
+    var log = readBrushLog();
+    var todayKey = today();
+    var count = log[todayKey] || 0;
+
+    countEl.textContent = String(count);
+
+    var streak = brushStreakOf(log);
+    streakEl.textContent = streak > 0 ? '连续 ' + streak + ' 天' : '今日未开始';
+    streakEl.classList.toggle('is-empty', streak === 0);
+
+    var days = [];
+    for (var i = 6; i >= 0; i--) {
+      var key = addDays(todayKey, -i);
+      days.push({ key: key, count: log[key] || 0 });
+    }
+
+    var max = 0;
+    days.forEach(function (day) { if (day.count > max) max = day.count; });
+
+    barsEl.innerHTML = days.map(function (day) {
+      var isToday = day.key === todayKey;
+      var height = day.count ? Math.max(8, Math.round(30 * day.count / max)) : 2;
+      var label = isToday ? '今' : BRUSH_WEEK_LABELS[weekdayOf(day.key)];
+      var text = day.key.slice(5) + ' · ' + (day.count ? day.count + ' 题' : '未刷');
+      return [
+        '<div class="brush-day" data-empty="' + (day.count ? 'false' : 'true') + '"',
+        ' data-today="' + (isToday ? 'true' : 'false') + '"',
+        ' title="' + text + '" aria-label="' + text + '">',
+        '  <span class="brush-bar" style="height:' + height + 'px"></span>',
+        '  <span class="brush-label">' + label + '</span>',
+        '</div>'
+      ].join('');
+    }).join('');
+  }
+
   var CURVE_STAGES = [
     { label: '第 0 阶', interval: '2 天' },
     { label: '第 1 阶', interval: '7 天' },
@@ -3720,6 +3940,7 @@
     var due = dueReviewCards();
 
     renderCurve(cards);
+    renderDailyBrush();
 
     if (!reviewSession.started || (reviewSession.total === 0 && reviewSession.answered === 0 && due.length > 0)) {
       var batch = buildDailyQueue(due);
@@ -3885,6 +4106,8 @@
       toast('写入失败：当前环境不允许使用 localStorage');
       return;
     }
+
+    bumpDailyBrush();
 
     if (result === 'wrong') {
       /* 原地停留：先记错因，点「下一题」才推进队列 */
