@@ -2,7 +2,29 @@
  * 更新策略：index.html 网络优先（在线时始终拿最新页面），其余资源缓存优先。
  * 资源有变化时把 CACHE_NAME 升到 jie-v4、jie-v5…，激活阶段会自动清理旧缓存。
  */
-const CACHE_NAME = 'jie-v4';
+const CACHE_NAME = 'jie-v5';
+const KATEX_FONTS = [
+  'KaTeX_AMS-Regular.woff2',
+  'KaTeX_Caligraphic-Bold.woff2',
+  'KaTeX_Caligraphic-Regular.woff2',
+  'KaTeX_Fraktur-Bold.woff2',
+  'KaTeX_Fraktur-Regular.woff2',
+  'KaTeX_Main-Bold.woff2',
+  'KaTeX_Main-BoldItalic.woff2',
+  'KaTeX_Main-Italic.woff2',
+  'KaTeX_Main-Regular.woff2',
+  'KaTeX_Math-BoldItalic.woff2',
+  'KaTeX_Math-Italic.woff2',
+  'KaTeX_SansSerif-Bold.woff2',
+  'KaTeX_SansSerif-Italic.woff2',
+  'KaTeX_SansSerif-Regular.woff2',
+  'KaTeX_Script-Regular.woff2',
+  'KaTeX_Size1-Regular.woff2',
+  'KaTeX_Size2-Regular.woff2',
+  'KaTeX_Size3-Regular.woff2',
+  'KaTeX_Size4-Regular.woff2',
+  'KaTeX_Typewriter-Regular.woff2'
+];
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -10,8 +32,11 @@ const CORE_ASSETS = [
   './all_questions.json',
   './icon-192.png',
   './icon-512.png',
-  './icon-512-maskable.png'
-];
+  './icon-512-maskable.png',
+  './vendor/katex/katex.min.css',
+  './vendor/katex/katex.min.js',
+  './vendor/katex/contrib/auto-render.min.js'
+].concat(KATEX_FONTS.map((f) => './vendor/katex/fonts/' + f));
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
