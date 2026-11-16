@@ -2257,6 +2257,7 @@
   var LEGACY_STORE_KEY = 'cuoti.records.v1';
   var LAST_QUERY_KEY = 'cuoti.lastQuery.v1';
   var DAILY_LIMIT_KEY = 'daily_review_limit';
+  var REVIEW_SESSION_KEY = 'cuoti.reviewSession.v1';
   var DEFAULT_DAILY_LIMIT = 20;
   var DAILY_LIMIT_OPTIONS = [
     { value: 10, label: '10 题' },
@@ -2738,6 +2739,7 @@
     if (inQueue) {
       reviewSession.queue = reviewSession.queue.filter(function (id) { return id !== questionId; });
       reviewSession.total = Math.max(reviewSession.answered, reviewSession.total - 1);
+      saveReviewSession();
     }
 
     renderAll();
@@ -3488,10 +3490,55 @@
     renderMath(mount);
   }
 
-  var reviewSession = { total: 0, answered: 0, queue: [], started: false, note: '', hold: null };
+  function blankReviewSession() {
+    return { total: 0, answered: 0, queue: [], started: false, note: '', hold: null };
+  }
+
+  /* 今日复习进度落盘：刷新或从桌面重新打开后接着做，不再清零 */
+  function loadReviewSession() {
+    try {
+      var raw = localStorage.getItem(REVIEW_SESSION_KEY);
+      if (!raw) return blankReviewSession();
+      var data = JSON.parse(raw);
+      if (!data || data.date !== today()) return blankReviewSession();
+      return {
+        total: Math.max(0, Number(data.total) || 0),
+        answered: Math.max(0, Number(data.answered) || 0),
+        queue: Array.isArray(data.queue) ? data.queue.filter(function (id) { return typeof id === 'string'; }) : [],
+        started: !!data.started,
+        note: typeof data.note === 'string' ? data.note : '',
+        hold: data.hold && typeof data.hold.questionId === 'string' ? data.hold : null
+      };
+    } catch (error) {
+      return blankReviewSession();
+    }
+  }
+
+  function saveReviewSession() {
+    try {
+      localStorage.setItem(REVIEW_SESSION_KEY, JSON.stringify({
+        date: today(),
+        total: reviewSession.total,
+        answered: reviewSession.answered,
+        queue: reviewSession.queue,
+        started: reviewSession.started,
+        note: reviewSession.note,
+        hold: reviewSession.hold
+      }));
+    } catch (error) {
+      /* 存储不可用时仅在当前页面内生效 */
+    }
+  }
+
+  var reviewSession = loadReviewSession();
 
   function resetReviewSession() {
-    reviewSession = { total: 0, answered: 0, queue: [], started: false, note: '', hold: null };
+    reviewSession = blankReviewSession();
+    try {
+      localStorage.removeItem(REVIEW_SESSION_KEY);
+    } catch (error) {
+      /* 忽略 */
+    }
   }
 
   /* 到期队列按 nextReviewDate 升序（越早到期越靠前），再按每日上限截取 */
@@ -3679,6 +3726,7 @@
       reviewSession.total = batch.length;
       reviewSession.queue = batch.map(function (card) { return card.questionId; });
       reviewSession.started = true;
+      saveReviewSession();
     }
 
     var queue = sessionQueueCards();
@@ -3793,6 +3841,7 @@
     if (!rest.length) return;
     reviewSession.queue = rest.map(function (card) { return card.questionId; });
     reviewSession.total = reviewSession.answered + rest.length;
+    saveReviewSession();
     renderReview();
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }
@@ -3843,9 +3892,8 @@
       reviewSession.note = (target.wrongCount || 0) >= 3
         ? '这题已经错了 ' + target.wrongCount + ' 次了，别死磕：建议点「显示答案」看解析，并抄写一遍步骤，后天再来。'
         : '';
+      saveReviewSession();
       renderAll();
-      var holdInput = document.getElementById('holdReasonInput');
-      if (holdInput) holdInput.focus();
       return;
     }
 
@@ -3854,6 +3902,7 @@
       return id !== target.questionId;
     });
     reviewSession.note = '';
+    saveReviewSession();
     renderAll();
     announceReviewProgress();
   }
@@ -3867,6 +3916,7 @@
     reviewSession.queue = reviewSession.queue.filter(function (id) {
       return id !== held.questionId;
     });
+    saveReviewSession();
     renderAll();
     announceReviewProgress();
   }
