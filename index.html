@@ -2722,6 +2722,32 @@
     return log[key];
   }
 
+  /* 让「重做进度」和「今日已刷」始终对齐：
+     - 旧版本只记重做进度、不记已刷，这里把已刷补齐
+     - 当天中途重置过进度（改上限、返回首页）时，用已刷数量把进度补回来 */
+  function reconcileDailyCounters() {
+    var log = readBrushLog();
+    var key = today();
+    var counted = log[key] || 0;
+
+    if (reviewSession.answered > counted) {
+      log[key] = reviewSession.answered;
+      writeBrushLog(log);
+      return;
+    }
+
+    /* 停留中的那题已经算进已刷，但还没点「下一题」，进度先不推进 */
+    var target = reviewSession.hold
+      ? Math.max(reviewSession.answered, counted - 1)
+      : counted;
+    var delta = target - reviewSession.answered;
+    if (delta > 0) {
+      reviewSession.answered = target;
+      reviewSession.total += delta;
+      saveReviewSession();
+    }
+  }
+
   /* 旧的 cuoti.records.v1 自动迁移到 review_cards_v2，原键保留不删 */
   function migrateLegacyCards() {
     try {
@@ -3939,12 +3965,13 @@
     var cards = readReviewCards();
     var due = dueReviewCards();
 
+    reconcileDailyCounters();
     renderCurve(cards);
     renderDailyBrush();
 
     if (!reviewSession.started || (reviewSession.total === 0 && reviewSession.answered === 0 && due.length > 0)) {
       var batch = buildDailyQueue(due);
-      reviewSession.total = batch.length;
+      reviewSession.total = reviewSession.answered + batch.length;
       reviewSession.queue = batch.map(function (card) { return card.questionId; });
       reviewSession.started = true;
       saveReviewSession();
